@@ -13,7 +13,7 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/apple/swift-nio",
+            url: "https://github.com/apple/swift-nio.git",
             from: "2.0.0"
         ),
     ],
