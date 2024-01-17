@@ -17,7 +17,7 @@ class HLSRequestHandler: ChannelInboundHandler {
 
     private var currentRequestHead: HTTPRequestHead?
 
-    init(urlSession: URLSession) {
+    public init(urlSession: URLSession) {
         self.urlSession = urlSession
     }
 
