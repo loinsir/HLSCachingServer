@@ -207,7 +207,7 @@ public class HLSCachingServer {
 
         runTask = Task(priority: .high) {
             os_log("Starting server on port %d", type: .info, port)
-            _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get().closeFuture.get()
+            _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get()
         }
     }
 
