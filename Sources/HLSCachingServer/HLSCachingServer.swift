@@ -195,7 +195,7 @@ public class HLSCachingServer {
                 value: AdaptiveRecvByteBufferAllocator()
             )
 
-        runTask = Task(priority: .high) {
+        runTask = Task(priority: .userInitiated) {
             os_log("Starting server on port %d", type: .info, port)
             _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get().closeFuture.get()
         }
