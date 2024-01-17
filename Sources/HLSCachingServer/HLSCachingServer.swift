@@ -148,7 +148,7 @@ public class HLSCachingServer {
 
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     private var serverBootstrap: ServerBootstrap?
-    private var runTask: Task<Void, Error>?
+    private var runOperationQueue = OperationQueue()
 
     private var urlSession: URLSession
 
@@ -205,14 +205,14 @@ public class HLSCachingServer {
                 value: AdaptiveRecvByteBufferAllocator()
             )
 
-        runTask = Task(priority: .high) {
+        runOperationQueue.addOperation { [weak self] in
             os_log("Starting server on port %d", type: .info, port)
-            _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get()
+            try? self?.serverBootstrap?.bind(host: "localhost", port: Int(port)).wait().closeFuture.wait()
         }
     }
 
     public func stop() {
-        runTask?.cancel()
+        runOperationQueue.cancelAllOperations()
         eventLoopGroup = nil
         serverBootstrap = nil
     }
