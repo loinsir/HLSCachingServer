@@ -99,7 +99,7 @@ public class HLSCachingServer {
         stop()
     }
 
-    func reverseProxyURL(from originURL: URL) -> URL? {
+    public func reverseProxyURL(from originURL: URL) -> URL? {
         guard let components = URLComponents(url: originURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -113,7 +113,7 @@ public class HLSCachingServer {
         return componentsCopy.url
     }
 
-    func start(port: UInt16) {
+    public func start(port: UInt16) {
         self.port = port
 
         eventLoopGroup = MultiThreadedEventLoopGroup.singleton
@@ -142,7 +142,7 @@ public class HLSCachingServer {
         }
     }
 
-    func stop() {
+    public func stop() {
         runTask?.cancel()
         eventLoopGroup = nil
         serverBootstrap = nil
