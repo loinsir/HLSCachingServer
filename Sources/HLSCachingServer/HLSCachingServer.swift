@@ -63,6 +63,12 @@ class HLSRequestHandler: ChannelInboundHandler {
                 requestHead.headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.name) }
                 request.cachePolicy = .returnCacheDataElseLoad
 
+                if self.urlSession.configuration.urlCache?.cachedResponse(for: request) != nil {
+                    os_log("ts request served from cache: %@", log: .default, type: .info, originURLString)
+                } else {
+                    os_log("ts request served from origin: %@", log: .default, type: .info, originURLString)
+                }
+
                 urlSession.dataTask(with: request) { data, response, error in
                     guard let data = data else {
                         return
