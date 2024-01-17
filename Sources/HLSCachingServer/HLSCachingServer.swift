@@ -32,10 +32,14 @@ class HLSRequestHandler: ChannelInboundHandler {
         case .end:
             guard let requestHead = currentRequestHead,
                   let originURLString = requestHead.uri.components(separatedBy: originURLKey).last,
-                  let originURL = URL(string: originURLString) else { return }
+                  let originURL = URL(string: originURLString) else {
+                os_log("Invalid request", log: .default, type: .error)
+                return
+            }
 
             switch originURL.pathExtension {
             case "m3u8":
+                os_log("m3u8 request arrived: %@", log: .default, type: .info, originURLString)
                 var request = URLRequest(url: originURL)
                 requestHead.headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.name) }
                 urlSession.dataTask(with: request) { data, response, error in
@@ -52,6 +56,7 @@ class HLSRequestHandler: ChannelInboundHandler {
                     context.flush()
                 }.resume()
             case "ts":
+                os_log("ts request arrived: %@", log: .default, type: .info, originURLString)
                 var request = URLRequest(url: originURL)
                 requestHead.headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.name) }
                 request.cachePolicy = .returnCacheDataElseLoad
