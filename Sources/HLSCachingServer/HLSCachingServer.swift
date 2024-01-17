@@ -8,6 +8,9 @@ import NIOHTTP1
 import OSLog
 
 let originURLKey = "__hls_origin_url"
+var bindPort = 1234
+
+// MARK: - handler
 
 class HLSRequestHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
@@ -77,7 +80,7 @@ class HLSRequestHandler: ChannelInboundHandler {
                         let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
                         let responsePart = HTTPServerResponsePart.head(responseHead)
                         context.write(self.wrapOutboundOut(responsePart), promise: nil)
-                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
+                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: self.reverseProxyPlaylist(with: data)!)))
                         context.write(self.wrapOutboundOut(responseBody), promise: nil)
                         let responseEnd = HTTPServerResponsePart.end(nil)
                         context.write(self.wrapOutboundOut(responseEnd), promise: nil)
@@ -90,24 +93,66 @@ class HLSRequestHandler: ChannelInboundHandler {
             currentRequestHead = nil
         }
     }
+
+    // MARK: - private methods
+
+    private func reverseProxyURL(from: URL) -> URL? {
+        guard let components = URLComponents(url: from, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        var componentsCopy = components
+        componentsCopy.scheme = "http"
+        componentsCopy.host = "localhost"
+        componentsCopy.port = bindPort
+        componentsCopy.queryItems = [
+            URLQueryItem(name: originURLKey, value: from.absoluteString)
+        ]
+        return componentsCopy.url
+    }
+
+    private func reverseProxyPlaylist(with data: Data) -> Data? {
+        guard let string = String(data: data, encoding: .utf8) else { return nil }
+        let lines = string.components(separatedBy: .newlines)
+        let newLines = lines.compactMap { line -> String? in
+            if line.hasPrefix("#") {
+                return line
+            } else {
+                guard let url = URL(string: line),
+                      let proxyURL = reverseProxyURL(from: url) else {
+                    return nil
+                }
+                return proxyURL.absoluteString
+            }
+        }
+        return newLines.joined(separator: "\n").data(using: .utf8)
+    }
 }
 
 public class HLSCachingServer {
 
-    private var port: UInt16?
+    // MARK: - properties
+
+    private let originURLKey = "__hls_origin_url"
+
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     private var serverBootstrap: ServerBootstrap?
     private var runTask: Task<Void, Error>?
 
     private var urlSession: URLSession
 
+    // MARK: - initializer
+
     public init(urlSession: URLSession = URLSession.shared) {
         self.urlSession = urlSession
     }
 
+    // MARK: - deinitializer
+
     deinit {
         stop()
     }
+
+    // MARK: - public methods
 
     public func reverseProxyURL(from originURL: URL) -> URL? {
         guard let components = URLComponents(url: originURL, resolvingAgainstBaseURL: false) else {
@@ -116,7 +161,7 @@ public class HLSCachingServer {
         var componentsCopy = components
         componentsCopy.scheme = "http"
         componentsCopy.host = "localhost"
-        componentsCopy.port = 1234
+        componentsCopy.port = bindPort
         componentsCopy.queryItems = [
             URLQueryItem(name: originURLKey, value: originURL.absoluteString)
         ]
@@ -124,7 +169,7 @@ public class HLSCachingServer {
     }
 
     public func start(port: UInt16) {
-        self.port = port
+        bindPort = Int(port)
 
         eventLoopGroup = MultiThreadedEventLoopGroup.singleton
         serverBootstrap = ServerBootstrap(group: eventLoopGroup!)
