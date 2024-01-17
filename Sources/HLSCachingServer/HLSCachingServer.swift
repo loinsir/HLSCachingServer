@@ -104,8 +104,8 @@ class HLSRequestHandler: ChannelInboundHandler {
 
     private func configureCacheSize() {
         let cacheSize = 1024 * 1024 * 2048 // 2GB
-        let cache = URLCache(memoryCapacity: cacheSize, diskCapacity: cacheSize, diskPath: nil)
-        urlSession.configuration.urlCache = cache
+        urlSession.configuration.urlCache?.memoryCapacity = cacheSize
+        urlSession.configuration.urlCache?.diskCapacity = cacheSize
     }
 
     private func reverseProxyURL(from: URL) -> URL? {
