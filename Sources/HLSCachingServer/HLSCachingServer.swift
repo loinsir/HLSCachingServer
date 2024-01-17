@@ -31,7 +31,7 @@ class HLSRequestHandler: ChannelInboundHandler {
             break
         case .end:
             guard let requestHead = currentRequestHead,
-                  let originURLString = requestHead.uri.components(separatedBy: originURLKey).last,
+                  let originURLString = requestHead.uri.components(separatedBy: originURLKey + "=").last,
                   let originURL = URL(string: originURLString) else {
                 os_log("Invalid request", log: .default, type: .error)
                 return
