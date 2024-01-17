@@ -10,7 +10,7 @@ import OSLog
 let originURLKey = "__hls_origin_url"
 
 class HLSRequestHandler: ChannelInboundHandler {
-    typealias InboundIn = HTTPClientRequestPart
+    typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
     private let urlSession: URLSession
@@ -121,7 +121,9 @@ public class HLSCachingServer {
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.addHandler(HLSRequestHandler(urlSession: self.urlSession))
+                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                    channel.pipeline.addHandler(HLSRequestHandler(urlSession: self.urlSession))
+                }
             }
             .childChannelOption(
                 ChannelOptions.socketOption(.so_reuseaddr),
