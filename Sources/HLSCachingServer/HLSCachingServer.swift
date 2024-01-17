@@ -16,15 +16,19 @@ class HLSRequestHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
-    private let urlSession: URLSession
+    // MARK: - properties
 
+    private let urlSession: URLSession
     private var currentRequestHead: HTTPRequestHead?
+
+    // MARK: - intializer
 
     init(urlSession: URLSession) {
         self.urlSession = urlSession
-        self.urlSession.configuration.urlCache?.memoryCapacity = 1024 * 1024 * 100
-        self.urlSession.configuration.urlCache?.diskCapacity = 1024 * 1024 * 100
+        configureCacheSize()
     }
+
+    // MARK: - methods
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let requestPart = self.unwrapInboundIn(data)
@@ -97,6 +101,12 @@ class HLSRequestHandler: ChannelInboundHandler {
     }
 
     // MARK: - private methods
+
+    private func configureCacheSize() {
+        let cacheSize = 1024 * 1024 * 2048 // 2GB
+        let cache = URLCache(memoryCapacity: cacheSize, diskCapacity: cacheSize, diskPath: nil)
+        urlSession.configuration.urlCache = cache
+    }
 
     private func reverseProxyURL(from: URL) -> URL? {
         guard let components = URLComponents(url: from, resolvingAgainstBaseURL: false) else {
@@ -195,7 +205,7 @@ public class HLSCachingServer {
                 value: AdaptiveRecvByteBufferAllocator()
             )
 
-        runTask = Task(priority: .userInitiated) {
+        runTask = Task(priority: .high) {
             os_log("Starting server on port %d", type: .info, port)
             _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get().closeFuture.get()
         }
