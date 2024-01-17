@@ -104,7 +104,7 @@ public class HLSCachingServer {
             return nil
         }
         var componentsCopy = components
-        componentsCopy.scheme = "https"
+        componentsCopy.scheme = "http"
         componentsCopy.host = "localhost"
         componentsCopy.port = 1234
         componentsCopy.queryItems = [
@@ -138,7 +138,7 @@ public class HLSCachingServer {
                 value: AdaptiveRecvByteBufferAllocator()
             )
 
-        runTask = Task(priority: .background) {
+        runTask = Task {
             os_log("Starting server on port %d", type: .info, port)
             _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get().closeFuture.get()
         }
