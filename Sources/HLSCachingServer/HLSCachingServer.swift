@@ -10,7 +10,7 @@ import OSLog
 let originURLKey = "__hls_origin_url"
 
 class HLSRequestHandler: ChannelInboundHandler {
-    typealias InboundIn = HTTPServerRequestPart
+    typealias InboundIn = HTTPClientRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
     private let urlSession: URLSession
