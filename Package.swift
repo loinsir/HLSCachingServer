@@ -25,12 +25,9 @@ let package = Package(
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "HLSCachingServer",
-            dependencies: [
-                .product(
-                    name: "NIO",
-                    package: "swift-nio"
-                )
-            ]
+            dependencies: [.product(name: "NIOCore", package: "swift-nio"),
+                           .product(name: "NIOPosix", package: "swift-nio"),
+                           .product(name: "NIOHTTP1", package: "swift-nio")]
         ),
         .testTarget(
             name: "HLSCachingServerTests",
