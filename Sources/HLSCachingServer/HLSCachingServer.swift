@@ -17,7 +17,7 @@ class HLSRequestHandler: ChannelInboundHandler {
 
     private var currentRequestHead: HTTPRequestHead?
 
-    public init(urlSession: URLSession) {
+    init(urlSession: URLSession) {
         self.urlSession = urlSession
     }
 
@@ -91,7 +91,7 @@ public class HLSCachingServer {
 
     private var urlSession: URLSession
 
-    init(urlSession: URLSession = URLSession.shared) {
+    public init(urlSession: URLSession = URLSession.shared) {
         self.urlSession = urlSession
     }
 
