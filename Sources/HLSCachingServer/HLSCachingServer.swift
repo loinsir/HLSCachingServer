@@ -46,14 +46,16 @@ class HLSRequestHandler: ChannelInboundHandler {
                     guard let data = data else {
                         return
                     }
-                    let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
-                    let responsePart = HTTPServerResponsePart.head(responseHead)
-                    context.write(self.wrapOutboundOut(responsePart), promise: nil)
-                    let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
-                    context.write(self.wrapOutboundOut(responseBody), promise: nil)
-                    let responseEnd = HTTPServerResponsePart.end(nil)
-                    context.write(self.wrapOutboundOut(responseEnd), promise: nil)
-                    context.flush()
+                    context.eventLoop.execute {
+                        let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
+                        let responsePart = HTTPServerResponsePart.head(responseHead)
+                        context.write(self.wrapOutboundOut(responsePart), promise: nil)
+                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
+                        context.write(self.wrapOutboundOut(responseBody), promise: nil)
+                        let responseEnd = HTTPServerResponsePart.end(nil)
+                        context.write(self.wrapOutboundOut(responseEnd), promise: nil)
+                        context.flush()
+                    }
                 }.resume()
             case "ts":
                 os_log("ts request arrived: %@", log: .default, type: .info, originURLString)
@@ -65,14 +67,16 @@ class HLSRequestHandler: ChannelInboundHandler {
                     guard let data = data else {
                         return
                     }
-                    let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
-                    let responsePart = HTTPServerResponsePart.head(responseHead)
-                    context.write(self.wrapOutboundOut(responsePart), promise: nil)
-                    let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
-                    context.write(self.wrapOutboundOut(responseBody), promise: nil)
-                    let responseEnd = HTTPServerResponsePart.end(nil)
-                    context.write(self.wrapOutboundOut(responseEnd), promise: nil)
-                    context.flush()
+                    context.eventLoop.execute {
+                        let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
+                        let responsePart = HTTPServerResponsePart.head(responseHead)
+                        context.write(self.wrapOutboundOut(responsePart), promise: nil)
+                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
+                        context.write(self.wrapOutboundOut(responseBody), promise: nil)
+                        let responseEnd = HTTPServerResponsePart.end(nil)
+                        context.write(self.wrapOutboundOut(responseEnd), promise: nil)
+                        context.flush()
+                    }
                 }.resume()
             default:
                 break
@@ -138,7 +142,7 @@ public class HLSCachingServer {
                 value: AdaptiveRecvByteBufferAllocator()
             )
 
-        runTask = Task {
+        runTask = Task(priority: .high) {
             os_log("Starting server on port %d", type: .info, port)
             _ = try await self.serverBootstrap?.bind(host: "localhost", port: Int(port)).get().closeFuture.get()
         }
