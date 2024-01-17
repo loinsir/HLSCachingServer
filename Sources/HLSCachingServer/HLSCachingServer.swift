@@ -22,6 +22,8 @@ class HLSRequestHandler: ChannelInboundHandler {
 
     init(urlSession: URLSession) {
         self.urlSession = urlSession
+        self.urlSession.configuration.urlCache?.memoryCapacity = 1024 * 1024 * 100
+        self.urlSession.configuration.urlCache?.diskCapacity = 1024 * 1024 * 100
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
