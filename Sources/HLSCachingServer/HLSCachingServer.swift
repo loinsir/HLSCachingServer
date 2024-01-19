@@ -8,7 +8,6 @@ import NIOHTTP1
 import OSLog
 
 let originURLKey = "__hls_origin_url"
-var bindPort = 1234
 
 // MARK: - handler
 
@@ -19,12 +18,16 @@ class HLSRequestHandler: ChannelInboundHandler {
     // MARK: - properties
 
     private let urlSession: URLSession
+    private let cache: URLCache
+    private let port: UInt16
     private var currentRequestHead: HTTPRequestHead?
 
     // MARK: - intializer
 
-    init(urlSession: URLSession) {
+    init(urlSession: URLSession, cache: URLCache, port: UInt16) {
         self.urlSession = urlSession
+        self.cache = cache
+        self.port = port
         configureCacheSize()
     }
 
@@ -36,8 +39,10 @@ class HLSRequestHandler: ChannelInboundHandler {
         switch requestPart {
         case .head(let head):
             self.currentRequestHead = head
+
         case .body:
             break
+
         case .end:
             guard let requestHead = currentRequestHead,
                   let originURLString = requestHead.uri.components(separatedBy: originURLKey + "=").last,
@@ -56,43 +61,37 @@ class HLSRequestHandler: ChannelInboundHandler {
                         return
                     }
                     context.eventLoop.execute {
-                        let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
-                        let responsePart = HTTPServerResponsePart.head(responseHead)
-                        context.write(self.wrapOutboundOut(responsePart), promise: nil)
-                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: self.reverseProxyPlaylist(with: data) ?? data)))
-                        context.write(self.wrapOutboundOut(responseBody), promise: nil)
-                        let responseEnd = HTTPServerResponsePart.end(nil)
-                        context.write(self.wrapOutboundOut(responseEnd), promise: nil)
-                        context.flush()
+                        self.sendHttpResponse(status: .ok, data: self.reverseProxyPlaylist(with: data) ?? data, to: context)
                     }
                 }.resume()
+
             case "ts":
                 os_log("ts request arrived: %@", log: .default, type: .info, originURLString)
                 var request = URLRequest(url: originURL)
                 requestHead.headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.name) }
                 request.cachePolicy = .returnCacheDataElseLoad
 
-                if self.urlSession.configuration.urlCache?.cachedResponse(for: request) != nil {
+                if let cachedResponse = cache.cachedResponse(for: request) {
                     os_log("ts request served from cache: %@", log: .default, type: .info, originURLString)
+                    context.eventLoop.execute {
+                        self.sendHttpResponse(status: .ok, data: cachedResponse.data, to: context)
+                    }
                 } else {
                     os_log("ts request served from origin: %@", log: .default, type: .info, originURLString)
-                }
+                    urlSession.dataTask(with: request) { data, response, error in
+                        guard let data, let response else {
+                            context.eventLoop.execute {
+                                self.sendHttpResponse(status: .badRequest, data: Data(), to: context)
+                            }
+                            return
+                        }
 
-                urlSession.dataTask(with: request) { data, response, error in
-                    guard let data = data else {
-                        return
-                    }
-                    context.eventLoop.execute {
-                        let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: .ok)
-                        let responsePart = HTTPServerResponsePart.head(responseHead)
-                        context.write(self.wrapOutboundOut(responsePart), promise: nil)
-                        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
-                        context.write(self.wrapOutboundOut(responseBody), promise: nil)
-                        let responseEnd = HTTPServerResponsePart.end(nil)
-                        context.write(self.wrapOutboundOut(responseEnd), promise: nil)
-                        context.flush()
-                    }
-                }.resume()
+                        self.cache.storeCachedResponse(CachedURLResponse(response: response, data: data), for: request)
+                        context.eventLoop.execute {
+                            self.sendHttpResponse(status: .ok, data: data, to: context)
+                        }
+                    }.resume()
+                }
             default:
                 break
             }
@@ -104,22 +103,8 @@ class HLSRequestHandler: ChannelInboundHandler {
 
     private func configureCacheSize() {
         let cacheSize = 1024 * 1024 * 2048 // 2GB
-        urlSession.configuration.urlCache?.memoryCapacity = cacheSize
-        urlSession.configuration.urlCache?.diskCapacity = cacheSize
-    }
-
-    private func reverseProxyURL(from: URL) -> URL? {
-        guard let components = URLComponents(url: from, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        var componentsCopy = components
-        componentsCopy.scheme = "http"
-        componentsCopy.host = "localhost"
-        componentsCopy.port = bindPort
-        componentsCopy.queryItems = [
-            URLQueryItem(name: originURLKey, value: from.absoluteString)
-        ]
-        return componentsCopy.url
+        cache.memoryCapacity = cacheSize
+        cache.diskCapacity = cacheSize
     }
 
     private func reverseProxyPlaylist(with data: Data) -> Data? {
@@ -130,7 +115,7 @@ class HLSRequestHandler: ChannelInboundHandler {
                 return line
             } else {
                 guard let url = URL(string: line),
-                      let proxyURL = reverseProxyURL(from: url) else {
+                      let proxyURL = HLSCachingServer.reverseProxyURL(from: url) else {
                     return nil
                 }
                 return proxyURL.absoluteString
@@ -138,23 +123,37 @@ class HLSRequestHandler: ChannelInboundHandler {
         }
         return newLines.joined(separator: "\n").data(using: .utf8)
     }
+
+    private func sendHttpResponse(status: HTTPResponseStatus, data: Data, to context: ChannelHandlerContext) {
+        let responseHead = HTTPResponseHead(version: .init(major: 1, minor: 1), status: status)
+        let responsePart = HTTPServerResponsePart.head(responseHead)
+        context.write(self.wrapOutboundOut(responsePart), promise: nil)
+        let responseBody = HTTPServerResponsePart.body(.byteBuffer(ByteBuffer(bytes: data)))
+        context.write(self.wrapOutboundOut(responseBody), promise: nil)
+        let responseEnd = HTTPServerResponsePart.end(nil)
+        context.write(self.wrapOutboundOut(responseEnd), promise: nil)
+        context.flush()
+    }
 }
 
 public class HLSCachingServer {
 
     // MARK: - properties
 
-    private let originURLKey = "__hls_origin_url"
+    private static let originURLKey = "__hls_origin_url"
+    public static private(set) var port: UInt16 = 12345
 
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
     private var serverBootstrap: ServerBootstrap?
 
-    private var urlSession: URLSession
+    private let urlSession: URLSession
+    private let urlCache: URLCache
 
     // MARK: - initializer
 
-    public init(urlSession: URLSession = URLSession.shared) {
+    public init(urlSession: URLSession = URLSession.shared, urlCache: URLCache) {
         self.urlSession = urlSession
+        self.urlCache = urlCache
     }
 
     // MARK: - deinitializer
@@ -165,14 +164,14 @@ public class HLSCachingServer {
 
     // MARK: - public methods
 
-    public func reverseProxyURL(from originURL: URL) -> URL? {
+    public static func reverseProxyURL(from originURL: URL) -> URL? {
         guard let components = URLComponents(url: originURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
         var componentsCopy = components
         componentsCopy.scheme = "http"
         componentsCopy.host = "localhost"
-        componentsCopy.port = bindPort
+        componentsCopy.port = Int(self.port)
         componentsCopy.queryItems = [
             URLQueryItem(name: originURLKey, value: originURL.absoluteString)
         ]
@@ -180,29 +179,19 @@ public class HLSCachingServer {
     }
 
     public func start(port: UInt16) {
-        bindPort = Int(port)
-
+        HLSCachingServer.port = port
         eventLoopGroup = MultiThreadedEventLoopGroup.singleton
         serverBootstrap = ServerBootstrap(group: eventLoopGroup!)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(HLSRequestHandler(urlSession: self.urlSession))
+                    channel.pipeline.addHandler(HLSRequestHandler(urlSession: self.urlSession, cache: self.urlCache, port: HLSCachingServer.port))
                 }
             }
-            .childChannelOption(
-                ChannelOptions.socketOption(.so_reuseaddr),
-                value: 1
-            )
-            .childChannelOption(
-                ChannelOptions.maxMessagesPerRead,
-                value: 16
-            )
-            .childChannelOption(
-                ChannelOptions.recvAllocator,
-                value: AdaptiveRecvByteBufferAllocator()
-            )
+            .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
+            .childChannelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
 
         os_log("Starting server on port %d", type: .info, port)
         _ = self.serverBootstrap?.bind(host: "localhost", port: Int(port))
