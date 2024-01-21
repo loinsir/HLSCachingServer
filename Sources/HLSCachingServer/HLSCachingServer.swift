@@ -7,11 +7,9 @@ import NIOPosix
 import NIOHTTP1
 import OSLog
 
-let originURLKey = "__hls_origin_url"
-
 // MARK: - handler
 
-class HLSRequestHandler: ChannelInboundHandler {
+final class HLSRequestHandler: ChannelInboundHandler {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -45,7 +43,7 @@ class HLSRequestHandler: ChannelInboundHandler {
 
         case .end:
             guard let requestHead = currentRequestHead,
-                  let originURLString = requestHead.uri.components(separatedBy: originURLKey + "=").last,
+                  let originURLString = requestHead.uri.components(separatedBy: HLSCachingServer.originURLKey + "=").last,
                   let originURL = URL(string: originURLString) else {
                 os_log("Invalid request", log: .default, type: .error)
                 return
@@ -140,7 +138,7 @@ public class HLSCachingServer {
 
     // MARK: - properties
 
-    private static let originURLKey = "__hls_origin_url"
+    public static let originURLKey = "__hls_origin_url"
     public static private(set) var port: UInt16 = 12345
 
     private var eventLoopGroup: MultiThreadedEventLoopGroup?
